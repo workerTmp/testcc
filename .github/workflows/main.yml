@@ -29,4 +29,6 @@ jobs:
            echo "::add-path::/opt/"
            echo "::add-path::~/codechecker/build/CodeChecker/bin"
            echo $PATH 
+           export PATH=123
+           echo $PATH
            #sudo python3 /opt/ccmatch.py in/ /opt/ out/
