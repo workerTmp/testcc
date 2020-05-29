@@ -23,9 +23,9 @@ jobs:
            cd insec
            sudo 7z x archive.7z -p${{ secrets.GIT_PASS }} -o/opt/
            cd ..
-           sudo apt-get install clang clang-tidy build-essential curl doxygen gcc-multilib git python-virtualenv python3-dev
-           git clone https://github.com/Ericsson/CodeChecker.git --depth 1 ~/codechecker
-           (cd ~/codechecker && make venv && source $PWD/venv/bin/activate && make package && export PATH="$PWD/build/CodeChecker/bin:$PATH")
+           #sudo apt-get install clang clang-tidy build-essential curl doxygen gcc-multilib git python-virtualenv python3-dev
+           #git clone https://github.com/Ericsson/CodeChecker.git --depth 1 ~/codechecker
+           #(cd ~/codechecker && make venv && source $PWD/venv/bin/activate && make package && export PATH="$PWD/build/CodeChecker/bin:$PATH")
            echo "::add-path::~/codechecker/build/CodeChecker/bin"
            echo $PATH
            CodeChecker
