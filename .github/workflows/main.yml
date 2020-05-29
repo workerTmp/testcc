@@ -1,0 +1,28 @@
+name: ccmatch if work
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, 'ccmatch')
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Only run this if exist in/astmatch
+      run: '(test -f in/*.ccmatch && echo func exists) ||  exit'  
+    - name: Install apt
+      env:
+        COMMIT_MSG: |
+          addcommit
+          skip-checks: true
+      run: |
+           sudo apt update -y
+           sudo apt-get install p7zip-full unzip 
+           sudo apt-get install clang clang-tidy build-essential curl doxygen gcc-multilib git python-virtualenv python3-dev
+           git clone https://github.com/Ericsson/CodeChecker.git --depth 1 ~/codechecker
+           (cd ~/codechecker && make venv && source $PWD/venv/bin/activate && make package && export PATH="$PWD/build/CodeChecker/bin:$PATH")
+           export PATH=~/codechecker/build/CodeChecker/bin:$PATH
+           sudo apt-get install gettext pandoc		   
+           sudo python3 /opt/ccmatch.py in/ /opt/ out/
