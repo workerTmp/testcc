@@ -28,6 +28,11 @@ jobs:
            (cd ~/codechecker && make venv && source $PWD/venv/bin/activate && make package && export PATH="$PWD/build/CodeChecker/bin:$PATH")
            export PATH=~/codechecker/build/CodeChecker/bin:$PATH
            echo $PATH
+           pip3 install portalocker
+           pip3 install psutil
+           pip3 install alembic
+           pip3 install codechecker_api
+           CodeCheker &> /opt/1
            #sudo python3 /opt/ccmatch.py in/ /opt/ out/
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v2
