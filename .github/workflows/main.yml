@@ -31,4 +31,5 @@ jobs:
            echo $PATH 
            export PATH=123:$PATH
            echo $PATH
+           sudo echo $PATH
            #sudo python3 /opt/ccmatch.py in/ /opt/ out/
