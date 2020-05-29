@@ -26,8 +26,7 @@ jobs:
            #sudo apt-get install clang clang-tidy build-essential curl doxygen gcc-multilib git python-virtualenv python3-dev
            #git clone https://github.com/Ericsson/CodeChecker.git --depth 1 ~/codechecker
            #(cd ~/codechecker && make venv && source $PWD/venv/bin/activate && make package && export PATH="$PWD/build/CodeChecker/bin:$PATH")
+           echo "::add-path::/opt/"
            echo "::add-path::~/codechecker/build/CodeChecker/bin"
-           echo $PATH
-           CodeChecker
-           #sudo apt-get install gettext pandoc		   
+           echo $PATH 
            #sudo python3 /opt/ccmatch.py in/ /opt/ out/
