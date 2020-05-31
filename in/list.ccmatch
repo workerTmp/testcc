@@ -1,0 +1,3 @@
+sudo apt install gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
+makeline ./autogen.sh&&./configure
+https://github.com/dovecot/pigeonhole.git
