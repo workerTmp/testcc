@@ -1,2 +1,2 @@
-makeline (cd curl&&./buildconf &&./configure)
+makeline ./buildconf &&./configure
 git clone https://github.com/curl/curl.git
