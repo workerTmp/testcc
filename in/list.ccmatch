@@ -1,2 +1,2 @@
-makeline ./buildconf &&./configure
-git clone https://github.com/curl/curl.git
+makeline ./configure
+https://github.com/squid-cache/squid.git
