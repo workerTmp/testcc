@@ -1,2 +1,2 @@
-makeline ./configure
+makeline ./bootstrap.sh&&./configure
 https://github.com/squid-cache/squid.git
