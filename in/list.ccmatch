@@ -1,6 +1,6 @@
 sudo apt install -y automake cmake build-essential libprocps-dev libtool pkg-config yasm texinfo autoconf flex bison 
-makeline cd deps&&bash ./build.sh&&cd..&&cmake -H. -Bbuild&&cmake --build build -- -j$2
+makeline cd deps&&bash ./build.sh&&cd ..&&cmake -H. -Bbuild&&cmake --build build -- -j$2
 https://github.com/skalenetwork/libBLS.git
 sudo apt install -yq clibprocps-dev g++-7 valgrind gawk sed libffi-dev ccache libgoogle-perftools-dev flex bison yasm texinfo autotools-dev automake python python-pip cmake libtool build-essential pkg-config autoconf wget git  libargtable2-dev libmicrohttpd-dev libhiredis-dev redis-server openssl libssl-dev doxygen
-makeline cd scripts&& ./build_deps.sh&&cd..&&cmake -H. -Bbuild&&cmake --build build -- -j$2
+makeline cd scripts&& ./build_deps.sh&&cd ..&&cmake -H. -Bbuild&&cmake --build build -- -j$2
 https://github.com/skalenetwork/skale-consensus.git
