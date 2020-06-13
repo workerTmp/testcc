@@ -1,0 +1,4 @@
+sudo apt install -y automake cmake build-essential libprocps-dev libtool pkg-config yasm texinfo autoconf flex bison 
+makeline cd deps&&bash ./build.sh&&cd ..&&cmake -H. -Bbuild
+buildline cmake --build build -- -j$2
+https://github.com/skalenetwork/libBLS.git
