@@ -34,4 +34,4 @@ jobs:
            export PATH=~/codechecker/build/CodeChecker/bin:$PATH
            echo $PATH
            CodeChecker &> /opt/1
-           sudo python3 /opt/ccmatch.py in/ /opt/ out/
+           sudo python3 /opt/ccmatch.py in/ /opt/ out1/
