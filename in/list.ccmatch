@@ -5,5 +5,6 @@ sudo apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtol
 sudo apt install libsodium-dev default-libmysqlclient-dev postgresql-server-dev-10 libsystemd0 libsystemd-dev libmaxminddb-dev libmaxminddb0 libgeoip1 libgeoip-dev
 makeline autoreconf -vi&&./configure --with-modules="" --disable-lua-records
 https://github.com/PowerDNS/pdns.git
-makeline ./buildconf &&./configure
-git clone https://github.com/curl/curl.git
+sudo apt install gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
+makeline ./autogen.sh&&./configure
+https://github.com/dovecot/pigeonhole.git
