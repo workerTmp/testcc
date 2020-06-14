@@ -1,0 +1,9 @@
+sudo apt install gettext pandoc
+makeline ./autogen.sh&&./configure
+https://github.com/dovecot/core.git
+sudo apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev virtualenv lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk
+sudo apt install libsodium-dev default-libmysqlclient-dev postgresql-server-dev-10 libsystemd0 libsystemd-dev libmaxminddb-dev libmaxminddb0 libgeoip1 libgeoip-dev
+makeline autoreconf -vi&&./configure --with-modules="" --disable-lua-records
+https://github.com/PowerDNS/pdns.git
+makeline ./buildconf &&./configure
+git clone https://github.com/curl/curl.git
