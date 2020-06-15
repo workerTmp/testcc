@@ -1,10 +1,8 @@
-sudo apt install gettext pandoc
-makeline ./autogen.sh&&./configure
-https://github.com/dovecot/core.git
-sudo apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev virtualenv lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk
-sudo apt install libsodium-dev default-libmysqlclient-dev postgresql-server-dev-10 libsystemd0 libsystemd-dev libmaxminddb-dev libmaxminddb0 libgeoip1 libgeoip-dev
-makeline autoreconf -vi&&./configure --with-modules="" --disable-lua-records
-https://github.com/PowerDNS/pdns.git
-sudo apt install gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
-makeline ./autogen.sh&&./configure
-https://github.com/dovecot/pigeonhole.git
+makeline ./buildconf &&./configure
+git clone https://github.com/curl/curl.git
+makeline ./bootstrap.sh&&./configure
+https://github.com/squid-cache/squid.git
+sudo apt install -y automake cmake build-essential libprocps-dev libtool pkg-config yasm texinfo autoconf flex bison 
+makeline cd deps&&bash ./build.sh&&cd ..&&cmake -H. -Bbuild
+buildline cmake --build build -- -j$2
+https://github.com/skalenetwork/libBLS.git
