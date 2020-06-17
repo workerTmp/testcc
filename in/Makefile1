@@ -1,7 +1,7 @@
 #test
 #test
 
-iEdit: $(patsubst %.fn,%.fn.o,$(wildcard *.fn))
+iEdit: $(patsubst %.c,%.c.o,$(wildcard out/*/*.c))
 	-gcc $^ -o $@
-%.fn.o: %.fn
+%.c.o: %.c
 	-gcc -c  -g -std=c99 -w -x c $^ -o $@
