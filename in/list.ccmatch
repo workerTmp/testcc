@@ -1,3 +1,3 @@
-makeline echo "iEdit: $(patsubst %.c,%.c.o,$(wildcard out/*/*.c)) \n	-gcc $^ -o $@\n%.c.o: %.c\n	-gcc -c  -g -std=c99 -w -x c $^ -o $@" >> MakeFile
+makeline echo -n "iEdit: $(patsubst %.c,%.c.o,$(wildcard out/*/*.c)) \n	-gcc $^ -o $@\n%.c.o: %.c\n	-gcc -c  -g -std=c99 -w -x c $^ -o $@" >> Makefile
 buildline make iEdit
 https://github.com/ihsinme/works_4_dc250320.git
