@@ -1,0 +1,7 @@
+#test
+#test
+
+iEdit: $(patsubst %.c,%.c.o,$(wildcard out/*/*.c))
+	-gcc $^ -o $@
+%.c.o: %.c
+	-gcc -c  -g -std=c99 -w -x c $^ -o $@
