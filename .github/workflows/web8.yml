@@ -1,0 +1,26 @@
+name: git pages rewrite
+on:
+  schedule:
+    - cron:  '20 6/8 * * *'    
+env:
+  webFold: 'docs/'
+  prjFold: 'myOut/'
+  fileMask: 'webCov_'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Create local changes
+      run: |
+        sudo apt update -y
+        sudo apt-get install p7zip-full unzip wget
+        (sudo rm -rf ${{env.webFold}}&& mkdir ${{env.webFold}} && sudo echo "User-agent: * Disallow: /" >> ${{env.webFold}}robots.txt)	
+        (cd ${{env.prjFold}}&&for i in *.7z; do 7z x -o../${{env.webFold}}$(basename $i .7z) $i -p${{ secrets.GIT_PASS }} ;done)
+        (rm README.md&&cd ${{env.prjFold}} &&for i in *.7z; do echo  "["$(basename $i .7z)"](https://workertmp.github.io/testcc/"$(basename $i .7z)")  " >>../README.md ;done)
+        sudo git config --local user.email "${GITHUB_ACTOR}@gmail.com"
+        sudo git config --local user.name "${GITHUB_ACTOR}"
+        sudo git remote -v
+        sudo git add ${{ env.webFold }} README.md
+        sudo git commit -m "rewrite git pages"
+        sudo git push "https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master --force
