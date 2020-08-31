@@ -7,3 +7,6 @@ makeline autoreconf -vi&&./configure --with-modules="" --disable-lua-records
 https://github.com/PowerDNS/pdns.git
 makeline ./buildconf &&./configure
 git clone https://github.com/curl/curl.git
+sudo apt install gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
+makeline ./autogen.sh&&./configure
+https://github.com/dovecot/pigeonhole.git
