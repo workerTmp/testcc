@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Plist HTML Viewer</title>
+
+    <meta charset="UTF-8">
+
+    <style type="text/css">
+      .severity-low {
+  background-color: #669603;
+}
+
+.severity-low:after {
+  content : 'L';
+}
+
+.severity-unspecified {
+  background-color: #666666;
+}
+
+.severity-unspecified:after {
+  content : 'U';
+}
+
+.severity-style {
+  background-color: #9932cc;
+}
+
+.severity-style:after {
+  content : 'S';
+}
+
+.severity-medium {
+  background-color: #a9d323;
+  color: black;
+}
+
+.severity-medium:after {
+  content : 'M';
+}
+
+.severity-high {
+  background-color: #ffa800;
+}
+
+.severity-high:after {
+  content : 'H';
+}
+
+.severity-critical {
+  background-color: #e92625;
+}
+
+.severity-critical:after {
+  content : 'C';
+}
+
+i[class*="severity-"] {
+  line-height: normal;
+  text-transform: capitalize;
+  font-size: 0.8em;
+  font-weight: bold;
+  color: white;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  text-align: center;
+  font-family: sans-serif;
+}
+
+      html, body {
+  width: 100%;
+  height: 100%;
+  padding: 0px;
+  margin: 0px;
+}
+
+div.container {
+  padding: 10px;
+}
+
+#content {
+  height: 100%;
+  display: block;
+  overflow: hidden;
+}
+
+#content > div {
+  margin: 10px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  overflow: hidden;
+  height: 97%;
+}
+
+.button {
+  background-color: #f1f1f1;
+  text-decoration: none;
+  display: inline-block;
+  padding: 8px 16px;
+  color: black;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: #ddd;
+  color: black;
+}
+
+.review-status {
+  color: white;
+  text-align: center;
+}
+
+.review-status-confirmed {
+  background-color: #e92625;
+}
+
+.review-status-false-positive {
+  background-color: grey;
+}
+
+.review-status-intentional {
+  background-color: #669603;
+}
+
+      table th {
+  font-size: 1.2em;
+  color: #fff;
+  line-height: 1.4;
+  background-color: #007ea7;
+}
+
+table th.active,
+table th.sortable:hover {
+  cursor: pointer;
+  background-color: #2da6ce;
+}
+
+table tr:nth-child(even) {
+  background-color: #f5f5f5;
+}
+
+table tr > td {
+  padding: 5px;
+}
+
+      #report-list {
+  width: 100%;
+}
+
+#report-list .bug-path-length {
+  width: 5%;
+  text-align: center;
+}
+
+#report-list .severity {
+  text-align: center;
+}
+
+    </style>
+
+    <script>
+      function setNonCompatibleBrowserMessage() {
+  document.body.innerHTML =
+    '<h2 style="margin-left: 20px;">Your browser is not compatible with CodeChecker Viewer!</h2> \
+     <p style="margin-left: 20px;">The version required for the following browsers are:</p> \
+     <ul style="margin-left: 20px;"> \
+     <li>Internet Explorer: version 9 or newer</li> \
+     <li>Firefox: version 22.0 or newer</li> \
+     </ul>';
+}
+
+// http://stackoverflow.com/questions/5916900/how-can-you-detect-the-version-of-a-browser
+var browserVersion = (function(){
+  var ua = navigator.userAgent, tem,
+    M = ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+
+  if (/trident/i.test(M[1])) {
+    tem = /\brv[ :]+(\d+)/g.exec(ua) || [];
+    return 'IE ' + (tem[1] || '');
+  }
+
+  if (M[1] === 'Chrome') {
+    tem = ua.match(/\b(OPR|Edge)\/(\d+)/);
+    if (tem != null) return tem.slice(1).join(' ').replace('OPR', 'Opera');
+  }
+
+  M = M[2] ? [M[1], M[2]] : [navigator.appName, navigator.appVersion, '-?'];
+  if ((tem = ua.match(/version\/(\d+)/i)) != null) M.splice(1, 1, tem[1]);
+    return M.join(' ');
+})();
+
+var pos = browserVersion.indexOf(' ');
+var browser = browserVersion.substr(0, pos);
+var version = parseInt(browserVersion.substr(pos + 1));
+
+var browserCompatible
+  = browser === 'Firefox'
+  ? version >= 22
+  : browser === 'IE'
+  ? version >= 9
+  : true;
+
+      // -------------------------------------------------------------------------
+//  Part of the CodeChecker project, under the Apache License v2.0 with
+//  LLVM Exceptions. See LICENSE for license information.
+//  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// -------------------------------------------------------------------------
+
+var BugList = {
+
+  init : function () {
+    this.initTableSort();
+    this.initBugPathLength();
+    this.initByUrl();
+  },
+
+  initTableSort : function () {
+    var that = this;
+
+    var table = document.getElementById('report-list');
+    table.querySelectorAll('th').forEach(function (column) {
+      if (that.canSort(column.id)) {
+        column.addEventListener('click', function () {
+          that.sort(column.id);
+        });
+        column.classList.add('sortable');
+      }
+    });
+  },
+
+  initBugPathLength : function () {
+    var that = this;
+
+    document.querySelectorAll('.bug-path-length').forEach(
+    function (widget) {
+      widget.style.backgroundColor =
+        that.generateRedGreenGradientColor(widget.innerHTML, 20, 0.5);
+    });
+  },
+
+  initByUrl : function () {
+    var state = {};
+    window.location.hash.substr(1).split('&').forEach(function (s) {
+      var parts = s.split('=');
+      state[parts[0]] = parts[1];
+    });
+
+    var column = state['sort'] ? state['sort'] : 'file-path';
+    var asc = state['asc'] ? !!parseInt(state['asc']) : true;
+    this.sort(column, asc);
+  },
+
+  generateRedGreenGradientColor : function (value, max, opacity) {
+    var red   = (255 * value) / max;
+    var green = (255 * (max - value)) / max;
+    var blue  = 0;
+    return 'rgba(' + parseInt(red) + ',' + parseInt(green) + ',' + blue
+      + ',' + opacity + ')';
+  },
+
+  canSort : function (columnId) {
+    return columnId === 'report-id' ||
+           columnId === 'file-path' ||
+           columnId === 'severity' ||
+           columnId === 'checker-name' ||
+           columnId === 'message' ||
+           columnId === 'bug-path-length' ||
+           columnId === 'review-status';
+  },
+
+  compare : function (columnId, a, b, asc) {
+    switch (columnId) {
+      case 'report-id':
+      case 'bug-path-length':
+        return asc
+          ? parseInt(a.innerHTML) > parseInt(b.innerHTML)
+          : parseInt(a.innerHTML) < parseInt(b.innerHTML);
+
+      case 'file-path':
+        var fileA = a.getAttribute('file');
+        var fileB = b.getAttribute('file');
+        var lineA = parseInt(a.getAttribute('line'));
+        var lineB = parseInt(b.getAttribute('line'));
+
+        if (asc) {
+          if (fileA > fileB) {
+            return true;
+          } else if (fileA === fileB) {
+            return lineA > lineB ? true : false;
+          } else {
+            return false;
+          }
+        } else {
+          if (fileA < fileB) {
+            return true;
+          } else if (fileA === fileB) {
+            return lineA < lineB ? true : false;
+          } else {
+            return false;
+          }
+        }
+
+      case 'severity':
+        return asc
+          ? a.getAttribute('severity') > b.getAttribute('severity')
+          : a.getAttribute('severity') < b.getAttribute('severity');
+
+      default:
+        return asc
+          ? a.innerHTML.toLowerCase() > b.innerHTML.toLowerCase()
+          : a.innerHTML.toLowerCase() < b.innerHTML.toLowerCase();
+    }
+  },
+
+  sort : function (columnId, asc) {
+    var rows = null,
+        switching = true,
+        i, j, x, y, minIdx;
+
+    var table = document.getElementById('report-list');
+    var column = document.getElementById(columnId);
+    var cellIndex = column.cellIndex;
+
+    if (asc === undefined) {
+      asc = column.getAttribute('sort') === 'desc' ? false : true;
+    }
+
+    var n = table.rows.length;
+    for (i = 1; i < n - 1; i++)
+    {
+      minIdx = i;
+      for (j = i + 1; j < n; j++) {
+        x = table.rows[minIdx].getElementsByTagName('td')[cellIndex];
+        y = table.rows[j].getElementsByTagName('td')[cellIndex];
+        if (this.compare(columnId, x, y, asc)) {
+          minIdx = j;
+        }
+      }
+
+      if (minIdx !== i) {
+        table.rows[i].parentNode.insertBefore(
+          table.rows[minIdx], table.rows[i]);
+      }
+    }
+
+    table.querySelectorAll('th').forEach(function (column) {
+      column.removeAttribute('sort');
+      column.classList.remove('active');
+    });
+
+    column.classList.add('active');
+    column.setAttribute('sort', asc ? 'desc' : 'asc');
+    window.location.hash = '#sort=' + columnId + '&asc=' + (asc ? 1 : 0);
+  }
+};
+
+
+      window.onload = function () {
+        if (!browserCompatible) {
+          setNonCompatibleBrowserMessage();
+        } else {
+          BugList.init()
+        }
+      }
+    </script>
+  </head>
+  <body>
+  <div class="container">
+    <a href="statistics.html" class="button">Go To Statistics</a>
+    <table id="report-list">
+      
+            <tr>
+              <th id="report-id">&nbsp;</th>
+              <th id="file-path">File</th>
+              <th id="severity">Severity</th>
+              <th id="checker-name">Checker name</th>
+              <th id="message">Message</th>
+              <th id="bug-path-length">Bug path length</th>
+              <th id="review-status">Review status</th>
+
+</tr>              <tr>
+                <td>5006</td>
+                <td file="/usr/local/include/dovecot/ostream.h" line="22">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=a41be3605f89d5a6b2e03c70bbc49f82">/usr/local/include/dovecot/ostream.h @ Line 22</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5007</td>
+                <td file="/usr/local/include/dovecot/ostream.h" line="103">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=b452d237f4dd32d371ce824be4fc84e6">/usr/local/include/dovecot/ostream.h @ Line 103</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5008</td>
+                <td file="/usr/local/include/dovecot/ostream.h" line="105">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=e5d96c701346c668c251040900f8b52b">/usr/local/include/dovecot/ostream.h @ Line 105</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5009</td>
+                <td file="/usr/local/include/dovecot/ostream.h" line="126">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=349ca67aa2f2ad641cefa9d96adbf199">/usr/local/include/dovecot/ostream.h @ Line 126</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5010</td>
+                <td file="/usr/local/include/dovecot/ostream.h" line="128">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=3ee0756394ab41dceb4757ac7ff0ca35">/usr/local/include/dovecot/ostream.h @ Line 128</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5011</td>
+                <td file="/usr/local/include/dovecot/path-util.h" line="1">
+                  <a href="sieve-file-storage.c_clang-tidy_2a074be782007fea702ae3f76fd06e9b.plist.html#reportHash=b551255c2b5d1191f0843803925bc826">/usr/local/include/dovecot/path-util.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5012</td>
+                <td file="/usr/local/include/dovecot/process-title.h" line="1">
+                  <a href="main.c_clang-tidy_143e31d8ef8e972b56bacb90fa75f6d2.plist.html#reportHash=3070465c4599407c105dff3a0b3e7eef">/usr/local/include/dovecot/process-title.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5013</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="1">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=1b1194aeb82baf5fffd90b57d6b73150">/usr/local/include/dovecot/program-client.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5014</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="4">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=11fcff3fe8c241111ad80c5b8fda7324">/usr/local/include/dovecot/program-client.h @ Line 4</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-include-order</td>
+                <td>#includes are not sorted properly</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5015</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="77">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=ba838b466f6cb80aa33c7a477471796f">/usr/local/include/dovecot/program-client.h @ Line 77</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5016</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="80">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=9ad2ab4cfc4baad84801d108d78f22a6">/usr/local/include/dovecot/program-client.h @ Line 80</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5017</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="91">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=87adc933814b61d9af15312126796a0c">/usr/local/include/dovecot/program-client.h @ Line 91</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5018</td>
+                <td file="/usr/local/include/dovecot/program-client.h" line="92">
+                  <a href="sieve-extprograms-common.c_clang-tidy_5829a29a1c23074ab9c2cb13ac10f88e.plist.html#reportHash=531fb6366d9a344f7b3b1a947c38d367">/usr/local/include/dovecot/program-client.h @ Line 92</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5019</td>
+                <td file="/usr/local/include/dovecot/raw-storage.h" line="1">
+                  <a href="edit-mail.c_clang-tidy_3de4296180f9c3bfbfa4be92b6a9a7e6.plist.html#reportHash=04310cbec7eaac0743d208e0a88dfb13">/usr/local/include/dovecot/raw-storage.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5020</td>
+                <td file="/usr/local/include/dovecot/restrict-access.h" line="1">
+                  <a href="main.c_clang-tidy_143e31d8ef8e972b56bacb90fa75f6d2.plist.html#reportHash=fe478aba4254f032f22f87a5460b8236">/usr/local/include/dovecot/restrict-access.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5021</td>
+                <td file="/usr/local/include/dovecot/rfc2231-parser.h" line="1">
+                  <a href="tag-mime.c_clang-tidy_cf06ecf9249f8d1e803a6c6c5716af3e.plist.html#reportHash=f2a9d96e3627724cf36d05b8e81faab3">/usr/local/include/dovecot/rfc2231-parser.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5022</td>
+                <td file="/usr/local/include/dovecot/rfc822-parser.h" line="1">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=e7993d09a12bb2c27fa8e87dadb06192">/usr/local/include/dovecot/rfc822-parser.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5023</td>
+                <td file="/usr/local/include/dovecot/safe-memset.h" line="1">
+                  <a href="client.c_clang-tidy_de1710df1a5b91663ad12508ab7a10d8.plist.html#reportHash=20f38c7b7443a30a52eaca67ed9f9251">/usr/local/include/dovecot/safe-memset.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5024</td>
+                <td file="/usr/local/include/dovecot/safe-mkstemp.h" line="1">
+                  <a href="sieve-binary-file.c_clang-tidy_67f54330624b485a22f30f4a54816cf6.plist.html#reportHash=6b9ef492f7c6135d3acffa3bd20e5c42">/usr/local/include/dovecot/safe-mkstemp.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5025</td>
+                <td file="/usr/local/include/dovecot/sasl-server.h" line="1">
+                  <a href="client.c_clang-tidy_de1710df1a5b91663ad12508ab7a10d8.plist.html#reportHash=9f5ce27ce11e1dd53d160e7d143e31de">/usr/local/include/dovecot/sasl-server.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5026</td>
+                <td file="/usr/local/include/dovecot/seq-range-array.h" line="1">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=e9dd6a274c808d09156d51895e34f5df">/usr/local/include/dovecot/seq-range-array.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5027</td>
+                <td file="/usr/local/include/dovecot/service-settings.h" line="1">
+                  <a href="managesieve-login-settings.c_clang-tidy_68e1d75a0b7f20f3b570969922eef1d1.plist.html#reportHash=7afec0955dc3efee2572b92be8501cef">/usr/local/include/dovecot/service-settings.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5028</td>
+                <td file="/usr/local/include/dovecot/settings-parser.h" line="1">
+                  <a href="managesieve-login-settings-plugin.c_clang-tidy_1f8f27ab09e49f42c9a9fc10abc438f1.plist.html#reportHash=bdce08357e10647a58ba05b7501f1646">/usr/local/include/dovecot/settings-parser.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5029</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="1">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=e307595db7e05b257c590397b4fbd5fb">/usr/local/include/dovecot/settings.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5030</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="59">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=f6401646339a2b1b62203b4ac5019a36">/usr/local/include/dovecot/settings.h @ Line 59</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5031</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="65">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=677946d56798806240e031cb411827e2">/usr/local/include/dovecot/settings.h @ Line 65</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5032</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="66">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=2208e26610f21144c8411db2dae3cc8d">/usr/local/include/dovecot/settings.h @ Line 66</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5033</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="68">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=f6401646339a2b1b62203b4ac5019a36">/usr/local/include/dovecot/settings.h @ Line 68</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5034</td>
+                <td file="/usr/local/include/dovecot/settings.h" line="71">
+                  <a href="sieve-ldap-storage-settings.c_clang-tidy_835e0072985f4ad566f0175732797d0d.plist.html#reportHash=45b1cb2ba8a5d99744a938b2089f9398">/usr/local/include/dovecot/settings.h @ Line 71</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5035</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="1">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=363c78e657e803079bdf49d3ceb0c5f4">/usr/local/include/dovecot/smtp-address.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5036</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="10">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=2f45a21e918de8becb3b6fdf6d85337b">/usr/local/include/dovecot/smtp-address.h @ Line 10</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5037</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="12">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=56f91ae3d2b8fd16f267b2f888d8c216">/usr/local/include/dovecot/smtp-address.h @ Line 12</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5038</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="14">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=6f9791f01f5507660042335f1c0782b2">/usr/local/include/dovecot/smtp-address.h @ Line 14</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5039</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="17">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=b353501e19012cb1b41d3708c3279c06">/usr/local/include/dovecot/smtp-address.h @ Line 17</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5040</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="24">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=6fcf53d319f2c58605e476ea6e06749d">/usr/local/include/dovecot/smtp-address.h @ Line 24</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5041</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="29">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=33e61e8af4e76b3281482a24ce8b021c">/usr/local/include/dovecot/smtp-address.h @ Line 29</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5042</td>
+                <td file="/usr/local/include/dovecot/smtp-address.h" line="37">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=37446780cc360d031572199b966fa575">/usr/local/include/dovecot/smtp-address.h @ Line 37</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5043</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="1">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=e8c9fed2947254db126ac5eb8f0f3743">/usr/local/include/dovecot/smtp-common.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5044</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="34">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=8352a416be22f7b36fc734f061f6db4a">/usr/local/include/dovecot/smtp-common.h @ Line 34</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5045</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="35">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=79ca1644e64e7864c52acafe55028368">/usr/local/include/dovecot/smtp-common.h @ Line 35</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5046</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="36">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=bb34003d700fa045f39d67e2586c361e">/usr/local/include/dovecot/smtp-common.h @ Line 36</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5047</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="37">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=c61f5fe28366caaaa2407c03ee53ddda">/usr/local/include/dovecot/smtp-common.h @ Line 37</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5048</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="38">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=861ff21b05c0f9e67e4a1f11274fb131">/usr/local/include/dovecot/smtp-common.h @ Line 38</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5049</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="39">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=39abb3ea2abba309d4124918f8b0054d">/usr/local/include/dovecot/smtp-common.h @ Line 39</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5050</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="40">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=bb7a29c85b177a2aa6bf82fdb4b39075">/usr/local/include/dovecot/smtp-common.h @ Line 40</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5051</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="41">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=7097ea8ffe4dba008d4ba3d7f1844ded">/usr/local/include/dovecot/smtp-common.h @ Line 41</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5052</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="42">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=7f6ae7296cf304b4a7af7a95d9907122">/usr/local/include/dovecot/smtp-common.h @ Line 42</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5053</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="43">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=d977d608a565a0e235785102b85894ba">/usr/local/include/dovecot/smtp-common.h @ Line 43</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5054</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="44">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=3a65a6fff72f9f8c715695557a79c8cb">/usr/local/include/dovecot/smtp-common.h @ Line 44</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5055</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="45">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=749169a5d470f5b60f1d51af82e895cc">/usr/local/include/dovecot/smtp-common.h @ Line 45</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5056</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="46">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=350abcc01b511b68ae737479e793c3ae">/usr/local/include/dovecot/smtp-common.h @ Line 46</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5057</td>
+                <td file="/usr/local/include/dovecot/smtp-common.h" line="48">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=152f08e9144c20f3a81292f8afccb693">/usr/local/include/dovecot/smtp-common.h @ Line 48</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5058</td>
+                <td file="/usr/local/include/dovecot/smtp-params.h" line="1">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=fddde709f0ceec0aa685886355a2c19b">/usr/local/include/dovecot/smtp-params.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5059</td>
+                <td file="/usr/local/include/dovecot/smtp-params.h" line="173">
+                  <a href="sieve-message.c_clang-tidy_c3fd216b728f92afc2549a94a4e8cebb.plist.html#reportHash=0c941a614167f97d2c124fb7d4676156">/usr/local/include/dovecot/smtp-params.h @ Line 173</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5060</td>
+                <td file="/usr/local/include/dovecot/smtp-submit-settings.h" line="1">
+                  <a href="imap-sieve.c_clang-tidy_819f5af6b050d563b5b5b7a1bc9e12ed.plist.html#reportHash=a394c2233fdf586cc3db3d3c61f0ed2b">/usr/local/include/dovecot/smtp-submit-settings.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5061</td>
+                <td file="/usr/local/include/dovecot/smtp-submit.h" line="1">
+                  <a href="imap-sieve.c_clang-tidy_819f5af6b050d563b5b5b7a1bc9e12ed.plist.html#reportHash=0cba8947f310b096069875401210316e">/usr/local/include/dovecot/smtp-submit.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5062</td>
+                <td file="/usr/local/include/dovecot/smtp-submit.h" line="65">
+                  <a href="imap-sieve.c_clang-tidy_819f5af6b050d563b5b5b7a1bc9e12ed.plist.html#reportHash=2126438a01be16839764ccda12495612">/usr/local/include/dovecot/smtp-submit.h @ Line 65</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5063</td>
+                <td file="/usr/local/include/dovecot/smtp-submit.h" line="66">
+                  <a href="imap-sieve.c_clang-tidy_819f5af6b050d563b5b5b7a1bc9e12ed.plist.html#reportHash=db4be84a8b71d31b2708fd80f431ebd0">/usr/local/include/dovecot/smtp-submit.h @ Line 66</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5064</td>
+                <td file="/usr/local/include/dovecot/str-sanitize.h" line="1">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=f28852c1e89e80144b7b269dc5372b44">/usr/local/include/dovecot/str-sanitize.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5065</td>
+                <td file="/usr/local/include/dovecot/str.h" line="1">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=ede4eaeb7160eeda249d3f220d6b5ecd">/usr/local/include/dovecot/str.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5066</td>
+                <td file="/usr/local/include/dovecot/str.h" line="78">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=ba7d0417a75f3d89c96677a72f40c18e">/usr/local/include/dovecot/str.h @ Line 78</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>google-readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5067</td>
+                <td file="/usr/local/include/dovecot/str.h" line="78">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=32f82931f1b9e1457eb6f523db8371bc">/usr/local/include/dovecot/str.h @ Line 78</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5068</td>
+                <td file="/usr/local/include/dovecot/str.h" line="78">
+                  <a href="edit-mail.c_clang-tidy_3de4296180f9c3bfbfa4be92b6a9a7e6.plist.html#reportHash=8cc1e4992a70216a569542aaf20888ce">/usr/local/include/dovecot/str.h @ Line 78</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>hicpp-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5069</td>
+                <td file="/usr/local/include/dovecot/strescape.h" line="1">
+                  <a href="managesieve-parser.c_clang-tidy_cefdb363f93fea65a64b4db486a23efc.plist.html#reportHash=38187bfc3636c1aaf9c8c2c4ef2a9dae">/usr/local/include/dovecot/strescape.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5070</td>
+                <td file="/usr/local/include/dovecot/strfuncs.h" line="1">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=65e3c8522598dcead28a7482f5fbf407">/usr/local/include/dovecot/strfuncs.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5071</td>
+                <td file="/usr/local/include/dovecot/strfuncs.h" line="102">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=50855db3f0c52806834ea48f16c78f97">/usr/local/include/dovecot/strfuncs.h @ Line 102</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>google-readability-casting</td>
+                <td>redundant cast to the same type</td>
+                <td class="bug-path-length">1</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5072</td>
+                <td file="/usr/local/include/dovecot/strnum.h" line="1">
+                  <a href="cmd-error.c_clang-tidy_40a723cceb564eb9d8a9d91ad718f665.plist.html#reportHash=c2f2fcf18b96a90d3f81b81c173754d0">/usr/local/include/dovecot/strnum.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5073</td>
+                <td file="/usr/local/include/dovecot/test-common.h" line="1">
+                  <a href="test-rfc2822.c_clang-tidy_1a12ed5f0a27880731bc726f65bda639.plist.html#reportHash=93d9286a6c5e3544530582ec77650f50">/usr/local/include/dovecot/test-common.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5074</td>
+                <td file="/usr/local/include/dovecot/test-common.h" line="77">
+                  <a href="test-rfc2822.c_clang-tidy_1a12ed5f0a27880731bc726f65bda639.plist.html#reportHash=61ab843874e90531ebf20cca5f3f4469">/usr/local/include/dovecot/test-common.h @ Line 77</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5075</td>
+                <td file="/usr/local/include/dovecot/test-common.h" line="104">
+                  <a href="test-rfc2822.c_clang-tidy_1a12ed5f0a27880731bc726f65bda639.plist.html#reportHash=624ee3124666081b6b680afe8d27ddd3">/usr/local/include/dovecot/test-common.h @ Line 104</a>
+                </td>
+                <td class="severity" severity="medium">
+                  <i class="severity-medium"></i>
+                </td>
+                <td>misc-macro-parentheses</td>
+                <td>macro argument should be enclosed in parentheses</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5076</td>
+                <td file="/usr/local/include/dovecot/time-util.h" line="1">
+                  <a href="sieve-ldap-script.c_clang-tidy_100e725b750b0be8e5afd9d729e1d6b8.plist.html#reportHash=be678701ef3096864e36d2ca033b3e10">/usr/local/include/dovecot/time-util.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5077</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="1">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=7ebd1d6e3dd3ed3954640c309c3e738f">/usr/local/include/dovecot/unichar.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5078</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="55">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=3351549596c00e0c97c855ddcc6f93ae">/usr/local/include/dovecot/unichar.h @ Line 55</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5079</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="56">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=d852b4a69a0c6140f31684f024c769e0">/usr/local/include/dovecot/unichar.h @ Line 56</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5080</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="93">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=a1bf917bb7f8c135ac3b26615cadf991">/usr/local/include/dovecot/unichar.h @ Line 93</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5081</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="126">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=3433504fd55529f2c08618b16c561c47">/usr/local/include/dovecot/unichar.h @ Line 126</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">4</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5082</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="127">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=fe995eeadd19dce98cebfdb9e0283450">/usr/local/include/dovecot/unichar.h @ Line 127</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">4</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5083</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="129">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=7c96967e527e5742c5f70f716400e5b3">/usr/local/include/dovecot/unichar.h @ Line 129</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">1</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5084</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="138">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=2d4f94901ebb89d7cc3a64a84448b64e">/usr/local/include/dovecot/unichar.h @ Line 138</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5085</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="139">
+                  <a href="cmd-filter-sieve.c_clang-tidy_2c105cfa067acc28fdeb3e239c0bca6a.plist.html#reportHash=350b72167be25da86812b3351f23e399">/usr/local/include/dovecot/unichar.h @ Line 139</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>hicpp-signed-bitwise</td>
+                <td>use of a signed integer operand with a binary bitwise operator</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5086</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="93">
+                  <a href="edit-mail.c_clang-tidy_3de4296180f9c3bfbfa4be92b6a9a7e6.plist.html#reportHash=d0f0d9dde90eb37ab30b6a2438ba87e5">/usr/local/include/dovecot/unichar.h @ Line 93</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>hicpp-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5087</td>
+                <td file="/usr/local/include/dovecot/unichar.h" line="93">
+                  <a href="imap-sieve.c_clang-tidy_819f5af6b050d563b5b5b7a1bc9e12ed.plist.html#reportHash=fc546042709c8d8f1aa5ab385faf6fc1">/usr/local/include/dovecot/unichar.h @ Line 93</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>google-readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5088</td>
+                <td file="/usr/local/include/dovecot/unlink-directory.h" line="1">
+                  <a href="testsuite-smtp.c_clang-tidy_ecb320b3f17ffc127afa36b03b72a10e.plist.html#reportHash=bd2b719db12260d5ea909c856b637fe2">/usr/local/include/dovecot/unlink-directory.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5089</td>
+                <td file="/usr/local/include/dovecot/unlink-old-files.h" line="1">
+                  <a href="sieve-file-storage.c_clang-tidy_2a074be782007fea702ae3f76fd06e9b.plist.html#reportHash=77e2f8c23dbdee942bf0025d9779179c">/usr/local/include/dovecot/unlink-old-files.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5090</td>
+                <td file="/usr/local/include/dovecot/utc-offset.h" line="1">
+                  <a href="ext-index-common.c_clang-tidy_dc24207dfcfc5e36daf327aaf3208030.plist.html#reportHash=8469cfb4035670839f6fc69733f859a4">/usr/local/include/dovecot/utc-offset.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5091</td>
+                <td file="/usr/local/include/dovecot/var-expand.h" line="1">
+                  <a href="managesieve-client.c_clang-tidy_9681cc3ccd9ae2cd65f1fa933097eb58.plist.html#reportHash=01864429a82b2250baeac6196400b0af">/usr/local/include/dovecot/var-expand.h @ Line 1</a>
+                </td>
+                <td class="severity" severity="low">
+                  <i class="severity-low"></i>
+                </td>
+                <td>llvm-header-guard</td>
+                <td>header guard does not follow preferred style</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5092</td>
+                <td file="/usr/local/include/dovecot/var-expand.h" line="50">
+                  <a href="managesieve-client.c_clang-tidy_9681cc3ccd9ae2cd65f1fa933097eb58.plist.html#reportHash=212242056683e32f34ada7fa796941be">/usr/local/include/dovecot/var-expand.h @ Line 50</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>hicpp-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5093</td>
+                <td file="/usr/local/include/dovecot/var-expand.h" line="50">
+                  <a href="managesieve-capabilities.c_clang-tidy_83143285b6e0f6a381e1c753a72a69a5.plist.html#reportHash=397588a59f9722372403e98c2d956aec">/usr/local/include/dovecot/var-expand.h @ Line 50</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>google-readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+              <tr>
+                <td>5094</td>
+                <td file="/usr/local/include/dovecot/var-expand.h" line="50">
+                  <a href="sieve-result.c_clang-tidy_00223804a64eddd0182aee8fb10ff893.plist.html#reportHash=84b55bb3bcb6e2ea8b64137ac27c3f9a">/usr/local/include/dovecot/var-expand.h @ Line 50</a>
+                </td>
+                <td class="severity" severity="style">
+                  <i class="severity-style"></i>
+                </td>
+                <td>readability-braces-around-statements</td>
+                <td>statement should be inside braces</td>
+                <td class="bug-path-length">2</td>
+                <td class="review-status review-status-"></td>
+              </tr>
+    </table> 
+  </div>
+  </body>
+</html>
