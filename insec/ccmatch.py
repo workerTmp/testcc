@@ -89,7 +89,8 @@ def gogo_cc(makeline,bl):
 
 def html_7z(lname,rname,upname,opath):    
     foldname = "retdec"  
-    outhtml = "outhtml"    
+    outhtml = "outhtml"
+	dev_index()
     file7z = lname+"_"+rname + ".7z"  
     if os.path.exists(foldname+"/"+file7z):
         os.remove(foldname+"/"+file7z)
