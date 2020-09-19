@@ -1,0 +1,22 @@
+name: clean pages
+on:
+  schedule:
+    - cron:  '20 3 * * 6'    
+env:
+  webFold: 'docs/'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Create local changes
+      run: |
+        sudo apt update -y
+        sudo apt-get install p7zip-full unzip wget
+        (sudo rm -rf ${{env.webFold}}&& mkdir ${{env.webFold}} && sudo echo "User-agent: * Disallow: /" >> ${{env.webFold}}robots.txt&&echo "1" >> ${{ env.webFold }}/tmp&&rm README.md)	
+        sudo git config --local user.email "${GITHUB_ACTOR}@gmail.com"
+        sudo git config --local user.name "${GITHUB_ACTOR}"
+        sudo git remote -v
+        sudo git add -A ${{ env.webFold }} README.md
+        sudo git commit -am "clean "
+        sudo git push "https://${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master --force
