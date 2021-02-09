@@ -78,8 +78,10 @@ def gogo_cc(makeline,bl):
     foldname = "retdec"
     outhtml = "outhtml"
     ex1 = ". ~/codechecker/venv/bin/activate&&export PATH=~/codechecker/build/CodeChecker/bin:$PATH"
-    ex2 = "~/codechecker/build/CodeChecker/bin/CodeChecker check -b \""+bl+"\"   --enable-all --enable alpha --enable debug  -o ./reports"
-    ex3 = "~/codechecker/build/CodeChecker/bin/CodeChecker parse  -e html -o "+outhtml+" ./reports/"
+#    ex2 = "~/codechecker/build/CodeChecker/bin/CodeChecker check -b \""+bl+"\"   --enable-all --enable alpha --enable debug  -o ./reports"
+#    ex3 = "~/codechecker/build/CodeChecker/bin/CodeChecker parse  -e html -o "+outhtml+" ./reports/"
+    ex2 = "~/codechecker/build/CodeChecker/bin/CodeChecker check -b \""+bl+"\"  -o ./reports"
+    ex3 = "~/codechecker/build/CodeChecker/bin/CodeChecker parse  -e html  ./reports/ -o ./"+outhtml
     cmd1 = "cd "+foldname+" && "+makeline
     #cmd11 = "cd "+foldname+" && autoreconf -vi && ./configure"
     cmd2 = "( cd "+foldname+" && "+ex1+" && "+ex2+" && "+ex3+" )"
