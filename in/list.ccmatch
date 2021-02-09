@@ -1,12 +1,12 @@
-sudo apt install gettext pandoc
+sudo apt-get install -y gettext pandoc
 makeline ./autogen.sh&&./configure
 https://github.com/dovecot/core.git
-sudo apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev virtualenv lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk
-sudo apt install libsodium-dev default-libmysqlclient-dev postgresql-server-dev-10 libsystemd0 libsystemd-dev libmaxminddb-dev libmaxminddb0 libgeoip1 libgeoip-dev
+sudo apt-get install -y libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev virtualenv lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk
+sudo apt-get install -y libsodium-dev default-libmysqlclient-dev postgresql-server-dev-10 libsystemd0 libsystemd-dev libmaxminddb-dev libmaxminddb0 libgeoip1 libgeoip-dev
 makeline autoreconf -vi&&./configure --with-modules="" --disable-lua-records
 https://github.com/PowerDNS/pdns.git
 makeline ./buildconf &&./configure
 git clone https://github.com/curl/curl.git
-sudo apt install gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
+sudo apt-get install -y gettext pandoc&&git clone https://github.com/dovecot/core.git && cd core&&./autogen.sh &&./configure&&make&&sudo make install&&cd..
 makeline ./autogen.sh&&./configure
 https://github.com/dovecot/pigeonhole.git
