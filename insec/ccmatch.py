@@ -21,7 +21,7 @@ def dev_index():
 	countBody=0
 	nameIndex=0
 	endHtml="    </table> \n  </div>\n  </body>\n</html>"
-	if Path(pathName+"index.html").stat().st_size>1000000:
+	if os.path.exists(pathName+"index.html") and Path(pathName+"index.html").stat().st_size>1000000:
 		with open(pathName+"index.html") as f:
 			for line in f:
 				if flagFindStart==0 and not "</tr>" in line:
@@ -84,10 +84,19 @@ def gogo_cc(makeline,bl):
     ex3 = "~/codechecker/build/CodeChecker/bin/CodeChecker parse  -e html  ./reports/ -o ./"+outhtml
     cmd1 = "cd "+foldname+" && "+makeline
     #cmd11 = "cd "+foldname+" && autoreconf -vi && ./configure"
-    cmd2 = "( cd "+foldname+" && "+ex1+" && "+ex2+" && "+ex3+" )"
+#    cmd2 = "( cd "+foldname+" && "+ex1+" && "+ex2+" && "+ex3+" )"
+    cmd2 = "( cd "+foldname+" && "+ex1+" && "+ex2 +" )"
+    cmd3 = "( cd "+foldname+" && "+ex1+" && "+ex3+" )"
+
     os.system(cmd1)
     #os.system(cmd11)
     os.system(cmd2)
+    print("parser start BBAADDD")
+    print(cmd3)
+    print("gogo")
+    os.system(cmd3)
+    print("parser end")
+    os.system("ls -al retdec/outhtml/")
 
 def html_7z(lname,rname,upname,opath):    
     foldname = "retdec"  
